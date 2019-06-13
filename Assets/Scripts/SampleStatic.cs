@@ -7,7 +7,7 @@ using UnityEngine.Events;
 /// <summary>静的リストサンプル</summary>
 public class SampleStatic : MonoBehaviour {
 
-	private Text InfoText;
+	public static Text InfoText;
 	private int elementIndex;
 	private ReOrderableList reOrderableList;
 

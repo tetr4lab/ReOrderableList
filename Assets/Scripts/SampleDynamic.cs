@@ -7,7 +7,7 @@ using UnityEngine.Events;
 /// <summary>動的リストサンプル</summary>
 public class SampleDynamic : MonoBehaviour {
 
-	private Text InfoText;
+	public static Text InfoText;
 	private GameObject SampleList;
 	private List<string> ItemNames;
 	private GameObject ListPrefab;

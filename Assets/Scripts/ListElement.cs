@@ -7,6 +7,10 @@ using UnityEngine.EventSystems;
 /// <summary>長押しで並べ替え可能なスクロールリストの項目</summary>
 public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler {
 
+	#region Static
+	private static bool isTouchLock;
+	#endregion
+
 	[SerializeField, Tooltip ("並べ替え中のみ表示するアイコン")] private GameObject dragHandle = default;
 
 	private ReOrderableList orderableList; // 親コンポ
@@ -14,9 +18,10 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 	private ElementIndex elementIndex; // インデックスを保持するコンポ
 
 	private bool isPointerDown;
-	private int poinerId;
+	private int pointerId;
 	private float pointerDownTime;
 	private bool isDragging;
+
 	private Button [] buttons;
 	public bool Interactable {
 		get { return interactable; }
@@ -57,14 +62,14 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 	/// <summary>駆動</summary>
 	private void Update () {
 		if (!interactable) { return; }
-		if (isPointerDown && !orderableList.Orderable) {
+		if (isPointerDown && !Orderable) {
 			if (pointerDownTime > orderableList.longPress) {
 				orderableList.Orderable = true;
 				isPointerDown = false;
 			}
 			pointerDownTime += Time.deltaTime;
 		}
-		if (Orderable && isDragging) {
+		if (isDragging && Orderable) {
 			orderableList.UpdateDraggingPosition (transform.position);
 		}
 	}
@@ -73,22 +78,26 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
 	public void OnPointerDown (PointerEventData eventData) {
 		if (!interactable) { return; }
-		poinerId = eventData.pointerId;
-		isPointerDown = true;
-		pointerDownTime = 0f;
-		isDragging = false;
+		if (!isTouchLock && !isPointerDown && !isDragging && (eventData.pointerId == 0 || eventData.pointerId == -1)) {
+			isTouchLock = true;
+			pointerId = eventData.pointerId;
+			isPointerDown = true;
+			pointerDownTime = 0f;
+			isDragging = false;
+		}
 	}
 
 	public void OnPointerUp (PointerEventData eventData) {
 		if (!interactable) { return; }
-		if (poinerId == eventData.pointerId) {
+		if (pointerId == eventData.pointerId) {
 			isPointerDown = false;
+			isTouchLock = false;
 		}
 	}
 
 	public void OnPointerClick (PointerEventData eventData) {
 		if (!interactable) { return; }
-		if (eventData.pointerId == 0 || eventData.pointerId == -1) {
+		if (pointerId == eventData.pointerId) {
 			if (!Orderable && !isDragging) {
 				orderableList.OnSelect (elementIndex.Index);
 			}
@@ -97,7 +106,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
 	public void OnBeginDrag (PointerEventData eventData) {
 		if (!interactable) { return; }
-		if (poinerId == eventData.pointerId) {
+		if (pointerId == eventData.pointerId) {
 			if (!Orderable) {
 				if (scrollRect != null) {
 					scrollRect.OnBeginDrag (eventData);
@@ -112,7 +121,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
 	public void OnDrag (PointerEventData eventData) {
 		if (!interactable) { return; }
-		if (poinerId == eventData.pointerId) {
+		if (pointerId == eventData.pointerId) {
 			if (!Orderable) {
 				if (scrollRect != null) {
 					scrollRect.OnDrag (eventData);
@@ -125,7 +134,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
 	public void OnEndDrag (PointerEventData eventData) {
 		if (!interactable) { return; }
-		if (poinerId == eventData.pointerId) {
+		if (pointerId == eventData.pointerId) {
 			if (!Orderable) {
 				if (scrollRect != null) {
 					scrollRect.OnEndDrag (eventData);
@@ -134,9 +143,18 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 				orderableList.Dummy = null;
 			}
 			isDragging = false;
+			isTouchLock = false;
 		}
 	}
 
 	#endregion
 
+}
+
+/// <summary>ポインターイベントデータの拡張メソッド用クラス</summary>
+public static class PointerEventDataExtentions {
+	/// <summary>マウス左または最初の指で、以前と同じである</summary>
+	public static bool PointerIdValid (this PointerEventData eventData, PointerEventData lastEventData = null) {
+		return (eventData.pointerId == 0 || eventData.pointerId == -1) && (lastEventData == null || eventData.pointerId == lastEventData.pointerId);
+	}
 }
