@@ -9,10 +9,10 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
 	#region Static
 	/// <summary>アクティブな項目 後優先で排他制御</summary>
-	private static ListElement ActiveElement {
+	public static ListElement ActiveElement {
 		get { return activeElement; }
 		set {
-			if (activeElement != null && value != null && activeElement != value) {
+			if (activeElement != null && activeElement != value) {
 				activeElement.release ();
 			}
 			activeElement = value;
@@ -20,8 +20,6 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 	}
 	private static ListElement activeElement;
 	#endregion
-
-	[SerializeField, Tooltip ("並べ替え中のみ表示するアイコン")] private GameObject dragHandle = default;
 
 	private ReOrderableList orderableList; // 親コンポ
 	private ScrollRect scrollRect; // 親ScrollView
@@ -47,12 +45,6 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 	}
 	private bool interactable = true;
 
-	/// <summary>並べ替えモード切り替え</summary>
-	public bool Orderable {
-		get { return orderableList.Orderable; }
-		set { if (dragHandle) { dragHandle.SetActive (value); } }
-	}
-
 	/// <summary>初期化</summary>
 	public void Init () {
 		if (!orderableList) {
@@ -60,7 +52,6 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 			scrollRect = GetComponentInParent<ScrollRect> ();
 			elementIndex = GetComponentInChildren<ElementIndex> ();
 			buttons = GetComponentsInChildren<Button> ();
-			Orderable = false;
 		}
 	}
 
@@ -72,14 +63,14 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 	/// <summary>駆動</summary>
 	private void Update () {
 		if (!interactable) { return; }
-		if (isPointerDown && !Orderable) {
+		if (isPointerDown && !orderableList.Orderable) {
 			if (pointerDownTime > orderableList.longPress) {
 				orderableList.Orderable = true;
 				isPointerDown = false;
 			}
 			pointerDownTime += Time.deltaTime;
 		}
-		if (isDragging && Orderable) {
+		if (isDragging && orderableList.Orderable) {
 			orderableList.UpdateDraggingPosition (transform.position);
 		}
 	}
@@ -112,23 +103,23 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 		if (!interactable || ActiveElement != this) { return; }
 		isPointerDown = false;
 		if (!isDragging && !eventData.hovered.Contains (eventData.pointerPress)) {
-			ActiveElement = null;
+			activeElement = null;
 			lastEventData = eventData;
 		}
 	}
 
 	public void OnPointerClick (PointerEventData eventData) {
 		if (!interactable || ActiveElement != this) { return; }
-		if (!Orderable && !isDragging) {
+		if (!orderableList.Orderable && !isDragging) {
 			orderableList.OnSelect (elementIndex.Index);
-			ActiveElement = null;
+			activeElement = null;
 			lastEventData = eventData;
 		}
 	}
 
 	public void OnBeginDrag (PointerEventData eventData) {
 		if (!interactable || ActiveElement != this) { return; }
-		if (!Orderable) {
+		if (!orderableList.Orderable) {
 			if (scrollRect != null) {
 				scrollRect.OnBeginDrag (eventData);
 				lastEventData = eventData;
@@ -143,7 +134,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
 	public void OnDrag (PointerEventData eventData) {
 		if (!interactable || ActiveElement != this) { return; }
-		if (!Orderable) {
+		if (!orderableList.Orderable) {
 			if (scrollRect != null) {
 				scrollRect.OnDrag (eventData);
 				lastEventData = eventData;
@@ -156,7 +147,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
 	public void OnEndDrag (PointerEventData eventData) {
 		if (!interactable || ActiveElement != this) { return; }
-		if (!Orderable) {
+		if (!orderableList.Orderable) {
 			if (scrollRect != null) {
 				scrollRect.OnEndDrag (eventData);
 				lastEventData = eventData;
@@ -166,7 +157,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 			lastEventData = eventData;
 		}
 		isDragging = false;
-		ActiveElement = null;
+		activeElement = null;
 	}
 
 	#endregion

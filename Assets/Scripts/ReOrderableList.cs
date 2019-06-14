@@ -10,24 +10,20 @@ using Tetr4lab;
 /// <summary>長押しで並べ替え可能なスクロールリスト</summary>
 public class ReOrderableList : MonoBehaviour {
 
-	[SerializeField, Tooltip ("並べ替え中のみ表示するコンパネ")] private GameObject orderControlPanel = default;
-	[SerializeField, Tooltip ("完了ボタン")] private Button doneButton = default;
-	[SerializeField, Tooltip ("ドラッグ中の項目を所属させる画面")] private GameObject draggingScreen = default;
 	[SerializeField, Tooltip ("ScrollView/Viewportの左下")] private Transform viewportMinMark = default;
 	[SerializeField, Tooltip ("ScrollView/Viewportの右上")] private Transform viewportMaxMark = default;
 	[SerializeField, Tooltip ("ScrollView/Contentの左下")] private Transform contentMinMark = default;
 	[SerializeField, Tooltip ("ScrollView/Contentの右上")] private Transform contentMaxMark = default;
 	[SerializeField, Tooltip ("長押しの秒数")] public float longPress = 0.4f;
 	[SerializeField, Tooltip ("範囲外へドラッグした際のスクロール速度")] private Vector2 autoScrollSpeed = new Vector2 (20f, 20f);
-	[SerializeField, Tooltip ("項目をボタンにする")] private bool elementSelectable = true;
-	[SerializeField, Tooltip ("決定/取消キーの使用")] private bool enableKeyboardShortcut = true;
-	[SerializeField, Tooltip ("完了時に破棄")] private bool destroyOnDone = true;
 
-	[System.Serializable] public class OnReOrderCallback : UnityEvent<List<int>, int> { }
-	[SerializeField, Tooltip ("完了コールバック")] private OnReOrderCallback onDone = default;
-	[SerializeField, Tooltip ("並べ替え開始コールバック")] private OnReOrderCallback onBeginReOrder = default;
-	[SerializeField, Tooltip ("並べ替え更新コールバック")] private OnReOrderCallback onUpdateReOrder = default;
-	[SerializeField, Tooltip ("並べ替え終了コールバック")] private OnReOrderCallback onEndReOrder = default;
+	[Serializable] public class OnChangeModeCallback : UnityEvent<bool> { }
+	[SerializeField, Tooltip ("モード切替コールバック")] private OnChangeModeCallback onChangeMode = default;
+	[Serializable] public class OnReOrderCallback : UnityEvent<int> { }
+	[SerializeField, Tooltip ("項目選択コールバック")] private OnReOrderCallback onSelect = default;
+	[SerializeField, Tooltip ("並べ替え開始コールバック")] private OnReOrderCallback onBeginOrder = default;
+	[SerializeField, Tooltip ("並べ替え更新コールバック")] private OnReOrderCallback onUpdateOrder = default;
+	[SerializeField, Tooltip ("並べ替え終了コールバック")] private OnReOrderCallback onEndOrder = default;
 
 	/// <summary>ドラッグ中の隙間の制御 (項目から呼ばれる)</summary>
 	public GameObject Dummy {
@@ -58,20 +54,12 @@ public class ReOrderableList : MonoBehaviour {
 		get { return interactable; }
 		set {
 			interactable = value;
-			if (scrollRect) { scrollRect.enabled = value; }
-			if (doneButton) { doneButton.interactable = value && !orderable; }
-			if (orderControlPanel && orderControlPanelButtons != null) {
-				foreach (var button in orderControlPanelButtons) {
-					button.interactable = value;
-				}
-			}
 			foreach (var element in GetComponentsInChildren<ListElement> ()) {
 				element.Interactable = value;
 			}
 		}
 	}
 	private bool interactable = true;
-	private Button [] orderControlPanelButtons;
 
 	/// <summary>並べ替えモード切り替え (項目から呼ばれる)</summary>
 	public bool Orderable {
@@ -80,11 +68,9 @@ public class ReOrderableList : MonoBehaviour {
 		}
 		set {
 			orderable = value;
-			if (orderControlPanel) { orderControlPanel.SetActive (value); }
-			if (doneButton) { doneButton.interactable = !value; }
-			var listElements = content.GetComponentsInChildren<ListElement> ();
-			foreach (var element in listElements) {
-				element.Orderable = value;
+			if (!value) { ListElement.ActiveElement = null; }
+			if (onChangeMode != null) {
+				onChangeMode.Invoke (value);
 			}
 		}
 	}
@@ -95,13 +81,22 @@ public class ReOrderableList : MonoBehaviour {
 		get { return new List<ElementIndex> (content.GetComponentsInChildren<ElementIndex> ()).ConvertAll (element => element.Index); }
 	}
 
+	/// <summary>項目リストの取得</summary>
+	public List<GameObject> GameObjects {
+		get { return new List<ElementIndex> (content.GetComponentsInChildren<ElementIndex> ()).ConvertAll (element => element.gameObject); }
+	}
+
+	/// <summary>項目の取得</summary>
+	public GameObject this [int index] {
+		get { return (index >= 0 && index < elementsCount) ? content.transform.GetChild (referencePointsCount + index).gameObject : null; }
+	}
+
 	/// <summary>初期化</summary>
 	public void Init () {
 		if (!scrollRect) {
 			scrollRect = GetComponentInChildren<ScrollRect> ();
 			contentLayoutGroup = content.GetComponent<VerticalLayoutGroup> ();
 			referencePointsCount = content.transform.childCount - content.GetComponentsInChildren<ElementIndex> ().Length;
-			if (orderControlPanel) { orderControlPanelButtons = orderControlPanel.GetComponentsInChildren<Button> (); }
 			Orderable = false;
 		}
 	}
@@ -111,110 +106,126 @@ public class ReOrderableList : MonoBehaviour {
 		Init ();
 	}
 
-	/// <summary>駆動</summary>
-	private void Update () {
-		if (enableKeyboardShortcut) {
-			if (Input.GetKeyDown (KeyCode.Escape)) { onPressEscapeKey (); }
-			if (Input.GetKeyDown (KeyCode.Return) || Input.GetKeyDown (KeyCode.KeypadEnter)) { onPressEnterKey (); }
-		}
-	}
-
 	/// <summary>破棄</summary>
 	private void OnDestroy () {
-		if (onDone != null) {
-			onDone.RemoveAllListeners ();
-			onDone = null;
+		if (onChangeMode != null) {
+			onChangeMode.RemoveAllListeners ();
+			onChangeMode = null;
 		}
-		if (onBeginReOrder != null) {
-			onBeginReOrder.RemoveAllListeners ();
-			onBeginReOrder = null;
+		if (onSelect != null) {
+			onSelect.RemoveAllListeners ();
+			onSelect = null;
 		}
-		if (onUpdateReOrder != null) {
-			onUpdateReOrder.RemoveAllListeners ();
-			onUpdateReOrder = null;
+		if (onBeginOrder != null) {
+			onBeginOrder.RemoveAllListeners ();
+			onBeginOrder = null;
 		}
-		if (onEndReOrder != null) {
-			onEndReOrder.RemoveAllListeners ();
-			onEndReOrder = null;
+		if (onUpdateOrder != null) {
+			onUpdateOrder.RemoveAllListeners ();
+			onUpdateOrder = null;
 		}
-	}
-
-	/// <summary>完了コールバックの登録</summary>
-	public void AddOnDoneListener (UnityAction<List<int>, int> onDoneAction) {
-		if (onDoneAction != null) {
-			if (onDone == null) { onDone = new OnReOrderCallback (); }
-			onDone.AddListener (onDoneAction);
+		if (onEndOrder != null) {
+			onEndOrder.RemoveAllListeners ();
+			onEndOrder = null;
 		}
 	}
 
-	/// <summary>完了コールバックの除去</summary>
-	/// <param name="onDoneAction">nullなら全て</param>
-	public void RemoveOnDoneListener (UnityAction<List<int>, int> onDoneAction) {
-		if (onDoneAction != null) {
-			if (onDone != null) {
-				onDone.RemoveListener (onDoneAction);
+	/// <summary>モード切替コールバックの登録</summary>
+	public void AddOnChangeModeListener (UnityAction<bool> onChangeModeAction) {
+		if (onChangeModeAction != null) {
+			if (onChangeMode == null) { onChangeMode = new OnChangeModeCallback (); }
+			onChangeMode.AddListener (onChangeModeAction);
+		}
+	}
+
+	/// <summary>モード切替コールバックの除去</summary>
+	/// <param name="onChangeModeAction">nullなら全て</param>
+	public void RemoveOnChangeModeListener (UnityAction<bool> onChangeModeAction) {
+		if (onChangeModeAction != null) {
+			if (onChangeMode != null) {
+				onChangeMode.RemoveListener (onChangeModeAction);
 			} else {
-				onDone.RemoveAllListeners ();
+				onChangeMode.RemoveAllListeners ();
+			}
+		}
+	}
+
+	/// <summary>項目選択コールバックの登録</summary>
+	public void AddOnSelectListener (UnityAction<int> onSelectAction) {
+		if (onSelectAction != null) {
+			if (onSelect == null) { onSelect = new OnReOrderCallback (); }
+			onSelect.AddListener (onSelectAction);
+		}
+	}
+
+	/// <summary>項目選択コールバックの除去</summary>
+	/// <param name="onSelectAction">nullなら全て</param>
+	public void RemoveOnSelectListener (UnityAction<int> onSelectAction) {
+		if (onSelectAction != null) {
+			if (onSelect != null) {
+				onSelect.RemoveListener (onSelectAction);
+			} else {
+				onSelect.RemoveAllListeners ();
 			}
 		}
 	}
 
 	/// <summary>並べ替え開始コールバックの登録</summary>
-	public void AddOnBeginReOrderListener (UnityAction<List<int>, int> onBeginReOrderAction) {
-		if (onBeginReOrderAction != null) {
-			if (onBeginReOrder == null) { onBeginReOrder = new OnReOrderCallback (); }
-			onBeginReOrder.AddListener (onBeginReOrderAction);
+	public void AddOnBeginOrderListener (UnityAction<int> onBeginOrderAction) {
+		if (onBeginOrderAction != null) {
+			if (onBeginOrder == null) { onBeginOrder = new OnReOrderCallback (); }
+			onBeginOrder.AddListener (onBeginOrderAction);
 		}
 	}
 
 	/// <summary>並べ替え開始コールバックの除去</summary>
-	/// <param name="onBeginReOrderAction">nullなら全て</param>
-	public void RemoveOnBeginReOrderListener (UnityAction<List<int>, int> onBeginReOrderAction) {
-		if (onBeginReOrderAction != null) {
-			if (onBeginReOrder != null) {
-				onBeginReOrder.RemoveListener (onBeginReOrderAction);
+	/// <param name="onBeginOrderAction">nullなら全て</param>
+	public void RemoveOnBeginOrderListener (UnityAction<int> onBeginOrderAction) {
+		if (onBeginOrderAction != null) {
+			if (onBeginOrder != null) {
+				onBeginOrder.RemoveListener (onBeginOrderAction);
 			} else {
-				onBeginReOrder.RemoveAllListeners ();
+				onBeginOrder.RemoveAllListeners ();
 			}
 		}
 	}
 
 	/// <summary>並べ替え更新コールバックの登録</summary>
-	public void AddOnUpdateReOrderListener (UnityAction<List<int>, int> onUpdateReOrderAction) {
-		if (onUpdateReOrderAction != null) {
-			if (onUpdateReOrder == null) { onUpdateReOrder = new OnReOrderCallback (); }
-			onUpdateReOrder.AddListener (onUpdateReOrderAction);
+	public void AddOnUpdateOrderListener (UnityAction<int> onUpdateOrderAction) {
+		if (onUpdateOrderAction != null) {
+			if (onUpdateOrder == null) { onUpdateOrder = new OnReOrderCallback (); }
+			onUpdateOrder.AddListener (onUpdateOrderAction);
 		}
 	}
 
 	/// <summary>並べ替え更新コールバックの除去</summary>
-	/// <param name="onUpdateReOrderAction">nullなら全て</param>
-	public void RemoveOnUpdateReOrderListener (UnityAction<List<int>, int> onUpdateReOrderAction) {
-		if (onUpdateReOrderAction != null) {
-			if (onUpdateReOrder != null) {
-				onUpdateReOrder.RemoveListener (onUpdateReOrderAction);
+	/// <param name="onUpdateOrderAction">nullなら全て</param>
+	public void RemoveOnUpdateOrderListener (UnityAction<int> onUpdateOrderAction) {
+		if (onUpdateOrderAction != null) {
+			if (onUpdateOrder != null) {
+				onUpdateOrder.RemoveListener (onUpdateOrderAction);
 			} else {
-				onUpdateReOrder.RemoveAllListeners ();
+				onUpdateOrder.RemoveAllListeners ();
 			}
 		}
 	}
 
 	/// <summary>並べ替え終了コールバックの登録</summary>
-	public void AddOnEndReOrderListener (UnityAction<List<int>, int> onEndReOrderAction) {
-		if (onEndReOrderAction != null) {
-			if (onEndReOrder == null) { onEndReOrder = new OnReOrderCallback (); }
-			onEndReOrder.AddListener (onEndReOrderAction);
+	public void AddOnEndOrderListener (UnityAction<int> onEndOrderAction) {
+		if (onEndOrderAction != null) {
+			if (onEndOrder == null) { onEndOrder = new OnReOrderCallback (); }
+			onEndOrder.AddListener (onEndOrderAction);
 		}
 	}
 
 	/// <summary>並べ替え終了コールバックの除去</summary>
-	/// <param name="onEndReOrderAction">nullなら全て</param>
-	public void RemoveOnEndReOrderListener (UnityAction<List<int>, int> onEndReOrderAction) {
-		if (onEndReOrderAction != null) {
-			if (onEndReOrder != null) {
-				onEndReOrder.RemoveListener (onEndReOrderAction);
+	/// <param name="onEndOrderAction">nullなら全て</param>
+	public void RemoveOnEndOrderListener (UnityAction<int> onEndOrderAction) {
+		if (onEndOrderAction != null) {
+			if (onEndOrder != null) {
+				onEndOrder.RemoveListener (onEndOrderAction);
 			} else {
-				onEndReOrder.RemoveAllListeners ();
+				onEndOrder.RemoveAllListeners ();
 			}
 		}
 	}
@@ -253,12 +264,12 @@ public class ReOrderableList : MonoBehaviour {
 		var index = Mathf.Clamp ((elementsCount - 1) - Mathf.FloorToInt (normarizedContentPosition.y / (1f / elementsCount)), 0, elementsCount - 1);
 		if (dummy.transform.GetSiblingIndex () != referencePointsCount + index) {
 			dummy.transform.SetSiblingIndex (referencePointsCount + index);
-			if (onUpdateReOrder != null) { onUpdateReOrder.Invoke (Indexes, index); }
+			if (onUpdateOrder != null) { onUpdateOrder.Invoke (index); }
 		}
 		var delta = pos.OutArea (viewportRect);
 		if ((delta.y < 0f && scrollRect.verticalNormalizedPosition >= 0f) || (delta.y > 0f && scrollRect.verticalNormalizedPosition <= 1f)) {
 			if (delta.y > 0f && scrollRect.verticalNormalizedPosition < 0f) {
-				scrollRect.verticalNormalizedPosition = 1.2e-6f;
+				scrollRect.verticalNormalizedPosition = 1e-5f; // 脱出速度的な何か (ドラッグ中に下端に達した後、上向きに自動スクロールしない場合は、この数値を大きくしてみてください。)
 			}
 			scrollRect.velocity = -delta * autoScrollSpeed;
 		}
@@ -269,7 +280,7 @@ public class ReOrderableList : MonoBehaviour {
 		var obj = new GameObject ("DummyElement", new Type [] { typeof (RectTransform), typeof (ElementIndex), });
 		obj.transform.SetParent (parent.transform);
 		obj.transform.SetSiblingIndex (element.transform.GetSiblingIndex ());
-		element.transform.SetParent ((draggingScreen ?? this.gameObject).transform);
+		element.transform.SetParent (transform);
 		var rect = obj.GetComponent<RectTransform> ();
 		var sorceRect = element.GetComponent<RectTransform> ();
 		rect.sizeDelta = sorceRect.sizeDelta;
@@ -278,61 +289,28 @@ public class ReOrderableList : MonoBehaviour {
 		rect.localScale = sorceRect.localScale;
 		var index = element.GetComponentInChildren<ElementIndex> ().Index;
 		obj.GetComponent<ElementIndex> ().Index = index;
-		if (onBeginReOrder != null) { onBeginReOrder.Invoke (Indexes, index); }
+		if (onBeginOrder != null) { onBeginOrder.Invoke (index); }
 		return obj;
 	}
 
 	/// <summary>隙間の抹消</summary>
 	private void destroyDummy (GameObject element) {
 		if (element != null) {
-			var indexes = Indexes;
 			element.transform.SetParent (content.transform);
 			var index = dummy.transform.GetSiblingIndex ();
 			element.transform.SetSiblingIndex (index);
 			element = null;
-			if (onEndReOrder != null) { onEndReOrder.Invoke (indexes, index); }
+			if (onEndOrder != null) { onEndOrder.Invoke (index); }
 		}
 		Destroy (dummy.gameObject);
 	}
 
-	/// <summary>完了処理</summary>
-	private void done (int index) {
-		Interactable = false;
-		if (onDone != null) {
-			onDone.Invoke (Indexes, index);
-		}
-		if (destroyOnDone) { Destroy (this.gameObject); }
-	}
-
-	/// <summary>戻るキーが押された</summary>
-	private void onPressEscapeKey () {
-		if (Orderable && orderControlPanel) { OnPushBack (); } else { OnPushDone (); }
-	}
-
-	/// <summary>決定キーが押された</summary>
-	private void onPressEnterKey () {
-		if (!Orderable && doneButton) { OnPushDone (); }
-	}
-
 	/// <summary>項目が選択された</summary>
-	public void OnSelect (int index) {
-		if (elementSelectable) {
-			done (index);
+	public void OnSelect (int index = -1) {
+		if (onSelect != null) {
+			Interactable = false;
+			onSelect.Invoke (index);
 		}
 	}
-
-	#region Button Events
-
-	/// <summary>戻るボタンが押された</summary>
-	public void OnPushBack () {
-		Orderable = false;
-	}
-
-	/// <summary>完了ボタンが押された</summary>
-	public void OnPushDone () {
-		done (-1);
-	}
-
-	#endregion
 
 }

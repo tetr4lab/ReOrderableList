@@ -8,62 +8,110 @@ using UnityEngine.Events;
 public class SampleDynamic : MonoBehaviour {
 
 	public static Text InfoText;
-	private GameObject SampleList;
-	private List<string> ItemNames;
-	private GameObject ListPrefab;
-	private GameObject ElementPrefab;
+	private GameObject sampleList;
+	private List<string> itemNames;
+	private GameObject listPrefab;
+	private GameObject elementPrefab;
+	private ReOrderableList reOrderableList;
+	private Button doneButton;
+	private GameObject orderControlPanel;
+	private Button backButton;
 
 	private void Start () {
-		ListPrefab = Resources.Load ("SampleList") as GameObject;
-		ElementPrefab = Resources.Load ("SampleElement") as GameObject;
-		InfoText = transform.parent.GetComponentInChildren<Text> ();
+		InfoText = transform.parent.GetChild (transform.parent.childCount - 1).GetComponentInChildren<Text> ();
+		listPrefab = Resources.Load ("SampleList") as GameObject;
+		elementPrefab = Resources.Load ("SampleElement") as GameObject;
 		Restart ();
 	}
 
+	private void Update () {
+		if (sampleList && reOrderableList.Interactable) {
+			if (Input.GetKeyDown (KeyCode.Escape)) {
+				if (reOrderableList.Orderable) {
+					reOrderableList.Orderable = false;
+				} else {
+					OnPushDoneButton ();
+				}
+			}
+			if (Input.GetKeyDown (KeyCode.Return) || Input.GetKeyDown (KeyCode.KeypadEnter)) {
+				OnPushDoneButton ();
+			}
+		}
+	}
+
 	public void Restart () {
-		if (SampleList) { return; }
+		if (sampleList) { return; }
 		// デバッグ表示クリア
 		InfoText.text = "";
 		// 内部リスト項目生成
-		ItemNames = new List<string> { };
+		itemNames = new List<string> { };
 		for (var i = 0; i < 100; i++) {
-			ItemNames.Add (new RandomKey ().Key);
+			itemNames.Add (new RandomKey ().Key);
 		}
 		// リスト作成
-		SampleList = Instantiate (ListPrefab, transform);
-		var reOrderableList = SampleList.GetComponentInChildren<ReOrderableList> ();
-		// 完了コールバック
-		reOrderableList.AddOnDoneListener ( 
-			(indexes, index) => {
-				InfoText.text = $"クリックで再実行\n\n{((index < 0) ? "未選択" : $"選択: {index}: {ItemNames [index]}")}\n配置: {string.Join (", ", indexes.ConvertAll (i => i.ToString ()))}";
+		sampleList = Instantiate (listPrefab, transform);
+		doneButton = sampleList.transform.GetChild (2).GetComponent<Button> ();
+		doneButton.onClick.AddListener (OnPushDoneButton);
+		reOrderableList = sampleList.GetComponentInChildren<ReOrderableList> ();
+		orderControlPanel = sampleList.transform.GetChild (1).gameObject;
+		backButton = orderControlPanel.GetComponentInChildren<Button> ();
+		backButton.onClick.AddListener (() => { reOrderableList.Orderable = false; });
+		// モード切替コールバック
+		reOrderableList.AddOnChangeModeListener (
+			(orderable) => {
+				orderControlPanel.SetActive (orderable); // 並べ替え時専用コントロールパネル
+				doneButton.interactable = !orderable; // 完了ボタン
+				foreach (var obj in reOrderableList.GameObjects) {
+					obj.transform.GetChild (3).gameObject.SetActive (orderable); // ドラッグハンドル
+				}
+			}
+		);
+		// 選択コールバック
+		reOrderableList.AddOnSelectListener (
+			(index) => {
+				reOrderableList.Interactable = false;
+				printResult (reOrderableList.Indexes, index);
+				Destroy (sampleList);
 			}
 		);
 		// 並べ替えコールバック
 		int elementIndex = -1;
-		reOrderableList.AddOnBeginReOrderListener (
-			(indexes, index) => {
+		reOrderableList.AddOnBeginOrderListener (
+			(index) => {
 				elementIndex = index;
 				InfoText.text = $"開始: {index}";
 			}
 		);
-		reOrderableList.AddOnUpdateReOrderListener (
-			(indexes, index) => {
+		reOrderableList.AddOnUpdateOrderListener (
+			(index) => {
 				InfoText.text = $"更新: {elementIndex} ⇒ {index}";
 			}
 		);
-		reOrderableList.AddOnEndReOrderListener (
-			(indexes, index) => {
-				InfoText.text = $"終了: {string.Join (", ", indexes.ConvertAll (i => i.ToString ()))}";
+		reOrderableList.AddOnEndOrderListener (
+			(index) => {
+				InfoText.text = $"終了: {string.Join (", ", reOrderableList.Indexes.ConvertAll (i => i.ToString ()))}";
 			}
 		);
 		// リスト項目作成
-		for (var i = 0; i < ItemNames.Count; i++) {
-			var obj = Instantiate (ElementPrefab, transform);
+		for (var i = 0; i < itemNames.Count; i++) {
+			var obj = Instantiate (elementPrefab, transform);
 			var texts = obj.GetComponentsInChildren<Text> ();
 			texts [0].text = i.ToString ();
-			texts [1].text = ItemNames [i];
+			texts [1].text = itemNames [i];
 			reOrderableList.AddElement (obj);
 		}
+	}
+
+	/// <summary>完了ボタンが押された</summary>
+	public void OnPushDoneButton () {
+		reOrderableList.Interactable = false;
+		printResult (reOrderableList.Indexes, -1);
+		Destroy (sampleList);
+	}
+
+	/// <summary>結果表示</summary>
+	private void printResult (List<int> indexes, int index) {
+		InfoText.text = $"クリックで再実行\n\n{((index < 0) ? "未選択" : $"選択: {index}")}\n配置: {string.Join (", ", indexes.ConvertAll (i => i.ToString ()))}";
 	}
 
 }
