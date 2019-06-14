@@ -111,7 +111,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 	public void OnPointerUp (PointerEventData eventData) {
 		if (!interactable || ActiveElement != this) { return; }
 		isPointerDown = false;
-		if (!isDragging && !eventData.hovered.Contains (this.gameObject)) {
+		if (!isDragging && !eventData.hovered.Contains (eventData.pointerPress)) {
 			ActiveElement = null;
 			lastEventData = eventData;
 		}
