@@ -8,7 +8,17 @@ using UnityEngine.EventSystems;
 public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IPointerClickHandler, IBeginDragHandler, IDragHandler, IEndDragHandler {
 
 	#region Static
-	private static bool isTouchLock;
+	/// <summary>アクティブな項目 後優先で排他制御</summary>
+	private static ListElement ActiveElement {
+		get { return activeElement; }
+		set {
+			if (activeElement != null && value != null && activeElement != value) {
+				activeElement.release ();
+			}
+			activeElement = value;
+		}
+	}
+	private static ListElement activeElement;
 	#endregion
 
 	[SerializeField, Tooltip ("並べ替え中のみ表示するアイコン")] private GameObject dragHandle = default;
@@ -18,7 +28,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 	private ElementIndex elementIndex; // インデックスを保持するコンポ
 
 	private bool isPointerDown;
-	private int pointerId;
+	private int pointerId = int.MinValue;
 	private float pointerDownTime;
 	private bool isDragging;
 
@@ -74,12 +84,23 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 		}
 	}
 
-	#region Pointer / Drag Events
+	/// <summary>アクティブな項目を;強制解放</summary>
+	private void release () {
+		if (isPointerDown) { OnPointerUp (lastEventData); }
+		if (isDragging) { OnEndDrag (lastEventData); }
+		activeElement = null;
+	}
+
+	#region Pointer & Drag Events
+
+	/// <summary>最後に使ったポインターイベントデータ</summary>
+	private PointerEventData lastEventData;
 
 	public void OnPointerDown (PointerEventData eventData) {
 		if (!interactable) { return; }
-		if (!isTouchLock && !isPointerDown && !isDragging && (eventData.pointerId == 0 || eventData.pointerId == -1)) {
-			isTouchLock = true;
+		if (!isPointerDown && !isDragging && (eventData.pointerId >= 0 || eventData.pointerId == -1)) {
+			lastEventData = eventData;
+			ActiveElement = this;
 			pointerId = eventData.pointerId;
 			isPointerDown = true;
 			pointerDownTime = 0f;
@@ -88,73 +109,66 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 	}
 
 	public void OnPointerUp (PointerEventData eventData) {
-		if (!interactable) { return; }
-		if (pointerId == eventData.pointerId) {
-			isPointerDown = false;
-			isTouchLock = false;
+		if (!interactable || ActiveElement != this) { return; }
+		isPointerDown = false;
+		if (!isDragging && !eventData.hovered.Contains (this.gameObject)) {
+			ActiveElement = null;
+			lastEventData = eventData;
 		}
 	}
 
 	public void OnPointerClick (PointerEventData eventData) {
-		if (!interactable) { return; }
-		if (pointerId == eventData.pointerId) {
-			if (!Orderable && !isDragging) {
-				orderableList.OnSelect (elementIndex.Index);
-			}
+		if (!interactable || ActiveElement != this) { return; }
+		if (!Orderable && !isDragging) {
+			orderableList.OnSelect (elementIndex.Index);
+			ActiveElement = null;
+			lastEventData = eventData;
 		}
 	}
 
 	public void OnBeginDrag (PointerEventData eventData) {
-		if (!interactable) { return; }
-		if (pointerId == eventData.pointerId) {
-			if (!Orderable) {
-				if (scrollRect != null) {
-					scrollRect.OnBeginDrag (eventData);
-				}
-				isPointerDown = false;
-			} else {
-				orderableList.Dummy = gameObject;
+		if (!interactable || ActiveElement != this) { return; }
+		if (!Orderable) {
+			if (scrollRect != null) {
+				scrollRect.OnBeginDrag (eventData);
+				lastEventData = eventData;
 			}
-			isDragging = true;
+			isPointerDown = false;
+		} else {
+			orderableList.Dummy = gameObject;
+			lastEventData = eventData;
 		}
+		isDragging = true;
 	}
 
 	public void OnDrag (PointerEventData eventData) {
-		if (!interactable) { return; }
-		if (pointerId == eventData.pointerId) {
-			if (!Orderable) {
-				if (scrollRect != null) {
-					scrollRect.OnDrag (eventData);
-				}
-			} else {
-				transform.position = Input.mousePosition;
+		if (!interactable || ActiveElement != this) { return; }
+		if (!Orderable) {
+			if (scrollRect != null) {
+				scrollRect.OnDrag (eventData);
+				lastEventData = eventData;
 			}
+		} else {
+			transform.position = eventData.position;
+			lastEventData = eventData;
 		}
 	}
 
 	public void OnEndDrag (PointerEventData eventData) {
-		if (!interactable) { return; }
-		if (pointerId == eventData.pointerId) {
-			if (!Orderable) {
-				if (scrollRect != null) {
-					scrollRect.OnEndDrag (eventData);
-				}
-			} else {
-				orderableList.Dummy = null;
+		if (!interactable || ActiveElement != this) { return; }
+		if (!Orderable) {
+			if (scrollRect != null) {
+				scrollRect.OnEndDrag (eventData);
+				lastEventData = eventData;
 			}
-			isDragging = false;
-			isTouchLock = false;
+		} else {
+			orderableList.Dummy = null;
+			lastEventData = eventData;
 		}
+		isDragging = false;
+		ActiveElement = null;
 	}
 
 	#endregion
 
-}
-
-/// <summary>ポインターイベントデータの拡張メソッド用クラス</summary>
-public static class PointerEventDataExtentions {
-	/// <summary>マウス左または最初の指で、以前と同じである</summary>
-	public static bool PointerIdValid (this PointerEventData eventData, PointerEventData lastEventData = null) {
-		return (eventData.pointerId == 0 || eventData.pointerId == -1) && (lastEventData == null || eventData.pointerId == lastEventData.pointerId);
-	}
 }
