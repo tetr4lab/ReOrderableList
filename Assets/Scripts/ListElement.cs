@@ -89,7 +89,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 
 	public void OnPointerDown (PointerEventData eventData) {
 		if (!interactable) { return; }
-		if (!isPointerDown && !isDragging && (eventData.pointerId >= 0 || eventData.pointerId == -1)) {
+		if (!isPointerDown && !isDragging && (eventData.pointerId == 0 || eventData.pointerId == -1)) {
 			lastEventData = eventData;
 			ActiveElement = this;
 			pointerId = eventData.pointerId;
