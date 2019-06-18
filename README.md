@@ -1,5 +1,4 @@
-# ReOrderableList
-Re-orderable scroll view  (uGUI) / 長押しして並べ替えられるスクロールビュー (uGUI)
+# Re-orderable scroll view / 長押しして並べ替えられるスクロールビュー (uGUI)
 tags: Unity uGUI C#
 
 # 前提
@@ -12,9 +11,6 @@ tags: Unity uGUI C#
 - モード切替、ドラッグ開始、並び順更新、ドラッグ終了、項目の選択のコールバックを設定できます。
 
 # アセットの入手 (GitHub)
-ダウンロード ⇒ [ReOrderableList.unitypackage](https://github.com/tetr4lab/ReOrderableList/raw/master/ReOrderableList.unitypackage)
-[ソースはこちらです。](https://github.com/tetr4lab/ReOrderableList)
-
 - スクリプトコンポーネントとして明示的に使用するのは、主に`ReOrderableList`と`ListElement`です。
     - `ListElement`は明示しない場合でも内部で使われます。
     - `ElementIndex`は主に内部で使用されるコンポです。
