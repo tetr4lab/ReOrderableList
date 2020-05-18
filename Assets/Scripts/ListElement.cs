@@ -75,7 +75,7 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 		}
 	}
 
-	/// <summary>アクティブな項目を;強制解放</summary>
+	/// <summary>アクティブな項目を強制解放</summary>
 	private void release () {
 		if (isPointerDown) { OnPointerUp (lastEventData); }
 		if (isDragging) { OnEndDrag (lastEventData); }
@@ -140,7 +140,13 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 				lastEventData = eventData;
 			}
 		} else {
-			transform.position = eventData.position;
+#if true // スクロール方向への移動に限定
+			var pos = transform.position;
+			pos.y = eventData.position.y;
+			transform.position = pos;
+#else
+			transform.position = eventData.position.y;
+#endif
 			lastEventData = eventData;
 		}
 	}
@@ -160,6 +166,6 @@ public class ListElement : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
 		activeElement = null;
 	}
 
-	#endregion
+#endregion
 
 }

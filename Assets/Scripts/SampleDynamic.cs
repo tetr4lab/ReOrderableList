@@ -79,17 +79,17 @@ public class SampleDynamic : MonoBehaviour {
 		reOrderableList.AddOnBeginOrderListener (
 			(index) => {
 				elementIndex = index;
-				InfoText.text = $"開始: {index}";
+				StartCoroutine (printDelay (() => $"開始: {index}"));
 			}
 		);
 		reOrderableList.AddOnUpdateOrderListener (
 			(index) => {
-				InfoText.text = $"更新: {elementIndex} ⇒ {index}";
+				StartCoroutine (printDelay (() => $"更新: {elementIndex} ⇒ {index}"));
 			}
 		);
 		reOrderableList.AddOnEndOrderListener (
 			(index) => {
-				InfoText.text = $"終了: {string.Join (", ", reOrderableList.Indexes.ConvertAll (i => i.ToString ()))}";
+				StartCoroutine (printDelay (() => $"終了: {string.Join (", ", reOrderableList.Indexes.ConvertAll (i => i.ToString ()))}"));
 			}
 		);
 		// リスト項目作成
@@ -111,7 +111,13 @@ public class SampleDynamic : MonoBehaviour {
 
 	/// <summary>結果表示</summary>
 	private void printResult (List<int> indexes, int index) {
-		InfoText.text = $"クリックで再実行\n\n{((index < 0) ? "未選択" : $"選択: {index}")}\n配置: {string.Join (", ", indexes.ConvertAll (i => i.ToString ()))}";
+		StartCoroutine (printDelay (() => $"クリックで再実行\n\n{((index < 0) ? "未選択" : $"選択: {index}")}\n配置: {string.Join (", ", indexes.ConvertAll (i => i.ToString ()))}"));
+	}
+
+	/// <summary>遅延表示</summary>
+	private IEnumerator printDelay (System.Func<string> func) {
+		yield return null;
+		InfoText.text = func ();
 	}
 
 }

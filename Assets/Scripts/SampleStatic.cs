@@ -82,20 +82,26 @@ public class SampleStatic : MonoBehaviour {
 	private int elementIndex;
 	public void OnBeginOrderListener (int index) {
 		elementIndex = index;
-		InfoText.text = $"開始: {index}";
+		StartCoroutine (printDelay (() => InfoText.text = $"開始: {index}"));
 	}
 
 	public void OnUpdateOrderListener (int index) {
-		InfoText.text = $"更新: {elementIndex} ⇒ {index}";
+		StartCoroutine (printDelay (() => InfoText.text = $"更新: {elementIndex} ⇒ {index}"));
 	}
 
 	public void OnEndOrderListener (int index) {
-		InfoText.text = $"終了: {string.Join (", ", reOrderableList.Indexes.ConvertAll (i => i.ToString ()))}";
+		StartCoroutine (printDelay (() => InfoText.text = $"終了: {string.Join (", ", reOrderableList.Indexes.ConvertAll (i => i.ToString ()))}"));
 	}
 
 	/// <summary>結果表示</summary>
 	private void printResult (List<int> indexes, int index) {
-		InfoText.text = $"クリックで再実行\n\n{((index < 0) ? "未選択" : $"選択: {index}")}\n配置: {string.Join (", ", indexes.ConvertAll (i => i.ToString ()))}";
+		StartCoroutine (printDelay (() => $"クリックで再実行\n\n{((index < 0) ? "未選択" : $"選択: {index}")}\n配置: {string.Join (", ", indexes.ConvertAll (i => i.ToString ()))}"));
+	}
+
+	/// <summary>遅延表示</summary>
+	private IEnumerator printDelay (System.Func<string> func) {
+		yield return null;
+		InfoText.text = func ();
 	}
 
 }
